@@ -1,52 +1,86 @@
-import { useState, useEffect } from 'react'
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
+import { useState, useEffect, useRef } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
 
-GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+// Use CDN with STABLE version 3.11.174 (guaranteed to work!)
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
 interface PDFViewerProps {
   onTextSelect: (text: string, context: any) => void
 }
 
 export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
-  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [pageNum, setPageNum] = useState<number>(1)
   const [totalPages, setTotalPages] = useState<number>(0)
   const [scale, setScale] = useState<number>(1.5)
-  const [canvasRef, setCanvasRef] = useState<HTMLCanvasElement | null>(null)
-  const [isDragging, setIsDragging] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string>('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && file.type === 'application/pdf') {
-      setPdfFile(file)
       loadPDF(file)
     }
   }
 
   const loadPDF = async (file: File) => {
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const typedarray = new Uint8Array(reader.result as ArrayBuffer)
-      const pdf = await getDocument({ data: typedarray }).promise
-      setPdfDoc(pdf)
-      setTotalPages(pdf.numPages)
-      setPageNum(1)
-      renderPage(pdf, 1)
+    setLoading(true)
+    setError('')
+    
+    try {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const typedarray = new Uint8Array(reader.result as ArrayBuffer)
+        const pdf = await pdfjsLib.getDocument({data: typedarray}).promise
+        
+        setPdfDoc(pdf)
+        setTotalPages(pdf.numPages)
+        setPageNum(1)
+        setLoading(false)
+        
+        setTimeout(() => {
+          renderPage(pdf, 1)
+        }, 200)
+      }
+      reader.readAsArrayBuffer(file)
+    } catch (err) {
+      setError('Failed to load PDF: ' + (err as Error).message)
+      setLoading(false)
     }
-    reader.readAsArrayBuffer(file)
   }
 
   const renderPage = async (pdf: any, page: number) => {
-    if (!canvasRef) return
-    const pdfPage = await pdf.getPage(page)
-    const viewport = pdfPage.getViewport({ scale })
-    const canvas = canvasRef
-    const context = canvas.getContext('2d')
-    if (!context) return
-    canvas.height = viewport.height
-    canvas.width = viewport.width
-    await pdfPage.render({ canvasContext: context, viewport }).promise
+    const canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement
+    
+    if (!canvas) {
+      console.error('Canvas not found!')
+      return
+    }
+    
+    try {
+      const pdfPage = await pdf.getPage(page)
+      const viewport = pdfPage.getViewport({ scale })
+      
+      const context = canvas.getContext('2d')
+      
+      if (!context) {
+        console.error('Canvas context is null!')
+        return
+      }
+      
+      canvas.height = viewport.height
+      canvas.width = viewport.width
+      
+      await pdfPage.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise
+      
+      console.log('✅ PDF Page Rendered Successfully!')
+    } catch (err) {
+      setError('Failed to render: ' + (err as Error).message)
+    }
   }
 
   const goToPage = (newPage: number) => {
@@ -55,77 +89,71 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
       renderPage(pdfDoc, newPage)
     }
   }
-
-  const zoomIn = () => setScale(prev => Math.min(prev + 0.25, 3))
+    const zoomIn = () => setScale(prev => Math.min(prev + 0.25, 3))
   const zoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5))
-
   useEffect(() => {
-    if (pdfDoc && pageNum) renderPage(pdfDoc, pageNum)
-  }, [pageNum, scale, canvasRef, pdfDoc])
+    if (pdfDoc && pageNum) {
+      renderPage(pdfDoc, pageNum)
+    }
+  }, [pageNum, scale])
 
   return (
-    <div className="pdf-viewer">
-      {!pdfDoc && (
-        // FIX 1: Removed data-tauri-drag-region (conflicts with drop)
-        // FIX 2: Corrected JSX braces – no stray }} or extra >
-        <div
-          className={`file-upload ${isDragging ? 'dragging' : ''}`}
-          onDragOver={(e) => {
-            e.preventDefault()
-            e.dataTransfer.effectAllowed = 'copy'  // improves drop feedback
-            setIsDragging(true)
-          }}
-          onDragLeave={(e) => {
-            e.preventDefault()
-            setIsDragging(false)
-          }}
-          onDrop={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            setIsDragging(false)
-            const file = e.dataTransfer.files[0]
-            if (file && file.type === 'application/pdf') {
-              setPdfFile(file)
-              loadPDF(file)
-            }
-          }}
-          style={{
-            width: '100%',
-            height: '400px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'default'
-          }}
-        >
-          <label className="upload-btn">
+    <div style={{ padding: '1rem', height: '100%' }}>
+      <h2 style={{ marginBottom: '1rem', color: '#226f60' }}>📄 PDF Viewer</h2>
+      
+      {!pdfDoc ? (
+        <div style={{
+          border: '2px dashed #ccc',
+          borderRadius: '12px',
+          padding: '3rem',
+          textAlign: 'center',
+          backgroundColor: '#f9f9f9'
+        }}>
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              background: '#226f60',
+              color: 'white',
+              padding: '1rem 2rem',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              fontSize: '1rem',
+              marginBottom: '1rem'
+            }}
+          >
             📁 Upload PDF
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-            />
-          </label>
-          <p>or drag and drop PDF here</p>
-          {isDragging && <p className="drag-hint">📄 Drop the PDF here!</p>}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+          <p style={{ color: '#666' }}>or drag and drop PDF here</p>
         </div>
-      )}
-
-      {pdfDoc && (
-        <div className="pdf-controls">
-          <div className="navigation">
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {loading && <p>Loading PDF...</p>}
+          {error && <p style={{ color: 'red' }}>{error}</p>}
+          
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center' }}>
             <button onClick={() => goToPage(pageNum - 1)} disabled={pageNum <= 1}>⬅️ Prev</button>
             <span>Page {pageNum} of {totalPages}</span>
             <button onClick={() => goToPage(pageNum + 1)} disabled={pageNum >= totalPages}>Next ➡️</button>
           </div>
-          <div className="zoom-controls">
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center' }}>
             <button onClick={zoomOut}>🔍-</button>
             <span>{Math.round(scale * 100)}%</span>
             <button onClick={zoomIn}>🔍+</button>
           </div>
-          <canvas ref={(el) => setCanvasRef(el)} />
+
+          <div style={{ overflow: 'auto', border: '1px solid #ccc', borderRadius: '8px', maxHeight: '600px' }}>
+            <canvas id="pdf-canvas" style={{ display: 'block', margin: '0 auto' }} />
+          </div>
         </div>
       )}
     </div>
