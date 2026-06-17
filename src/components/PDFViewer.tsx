@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 
-// Use CDN with STABLE version 3.11.174 (guaranteed to work!)
+// Use stable worker version
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
 interface PDFViewerProps {
@@ -16,6 +16,8 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const renderTaskRef = useRef<any>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -38,10 +40,6 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
         setTotalPages(pdf.numPages)
         setPageNum(1)
         setLoading(false)
-        
-        setTimeout(() => {
-          renderPage(pdf, 1)
-        }, 200)
       }
       reader.readAsArrayBuffer(file)
     } catch (err) {
@@ -51,51 +49,88 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
   }
 
   const renderPage = async (pdf: any, page: number) => {
-    const canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement
-    
-    if (!canvas) {
+    if (!canvasRef.current) {
       console.error('Canvas not found!')
       return
     }
-    
+
+    // Cancel any ongoing render
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel()
+      renderTaskRef.current = null
+    }
+
     try {
       const pdfPage = await pdf.getPage(page)
       const viewport = pdfPage.getViewport({ scale })
-      
+
+      const canvas = canvasRef.current
       const context = canvas.getContext('2d')
-      
+
       if (!context) {
         console.error('Canvas context is null!')
         return
       }
-      
+
       canvas.height = viewport.height
       canvas.width = viewport.width
-      
-      await pdfPage.render({
+
+      const renderContext = {
         canvasContext: context,
         viewport: viewport
-      }).promise
-      
-      console.log('✅ PDF Page Rendered Successfully!')
-    } catch (err) {
-      setError('Failed to render: ' + (err as Error).message)
+      }
+
+      renderTaskRef.current = pdfPage.render(renderContext)
+      await renderTaskRef.current.promise
+
+      console.log('✅ Page', page, 'rendered successfully!')
+    } catch (err: any) {
+      if (err.name === 'RenderingCancelled') {
+        return // Expected, don't show error
+      }
+            console.error('Render error:', err)
+      setError('Failed to render page ' + page + ': ' + err.message)
     }
   }
 
-  const goToPage = (newPage: number) => {
-    if (pdfDoc && newPage >= 1 && newPage <= totalPages) {
+  const goToPage = (newPage: number) => {if (pdfDoc && newPage >= 1 && newPage <= totalPages) {
       setPageNum(newPage)
-      renderPage(pdfDoc, newPage)
     }
   }
-    const zoomIn = () => setScale(prev => Math.min(prev + 0.25, 3))
-  const zoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5))
+
+  const zoomIn = () => {
+    setScale(prev => {
+      const newScale = Math.min(prev + 0.25, 3)
+      setTimeout(() => {
+        if (pdfDoc && pageNum) {
+          renderPage(pdfDoc, pageNum)
+        }
+      }, 100)
+      return newScale
+    })
+  }
+
+  const zoomOut = () => {
+    setScale(prev => {
+      const newScale = Math.max(prev - 0.25, 0.5)
+      setTimeout(() => {
+        if (pdfDoc && pageNum) {
+          renderPage(pdfDoc, pageNum)
+        }
+      }, 100)
+      return newScale
+    })
+  }
+
   useEffect(() => {
     if (pdfDoc && pageNum) {
-      renderPage(pdfDoc, pageNum)
+      const timeoutId = setTimeout(() => {
+        renderPage(pdfDoc, pageNum)
+      }, 50)
+      
+      return () => clearTimeout(timeoutId)
     }
-  }, [pageNum, scale])
+  }, [pageNum])
 
   return (
     <div style={{ padding: '1rem', height: '100%' }}>
@@ -152,7 +187,7 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
           </div>
 
           <div style={{ overflow: 'auto', border: '1px solid #ccc', borderRadius: '8px', maxHeight: '600px' }}>
-            <canvas id="pdf-canvas" style={{ display: 'block', margin: '0 auto' }} />
+            <canvas ref={canvasRef} style={{ display: 'block', margin: '0 auto' }} />
           </div>
         </div>
       )}
