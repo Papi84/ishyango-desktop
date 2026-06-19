@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 
-// Use stable worker version
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
 interface PDFViewerProps {
@@ -54,7 +53,6 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
       return
     }
 
-    // Cancel any ongoing render
     if (renderTaskRef.current) {
       renderTaskRef.current.cancel()
       renderTaskRef.current = null
@@ -81,19 +79,82 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
       }
 
       renderTaskRef.current = pdfPage.render(renderContext)
-      await renderTaskRef.current.promise
+            await renderTaskRef.current.promise
 
       console.log('✅ Page', page, 'rendered successfully!')
+
+      enableTextSelection(pdf, page, viewport)
     } catch (err: any) {
       if (err.name === 'RenderingCancelled') {
-        return // Expected, don't show error
+        return
       }
-            console.error('Render error:', err)
+      console.error('Render error:', err)
       setError('Failed to render page ' + page + ': ' + err.message)
     }
   }
 
-  const goToPage = (newPage: number) => {if (pdfDoc && newPage >= 1 && newPage <= totalPages) {
+  const enableTextSelection = async (pdf: any, page: number, viewport: any) => {
+   if (!canvasRef.current || !pdf) return
+    try {
+      const pdfPage = await pdf.getPage(page)
+      const textContent = await pdfPage.getTextContent()
+      
+      let textLayerDiv = document.getElementById('text-layer')
+      if (!textLayerDiv) {
+        textLayerDiv = document.createElement('div')
+        textLayerDiv.id = 'text-layer'
+        textLayerDiv.className = 'textLayer'
+        
+        Object.assign(textLayerDiv.style, {
+          position: 'absolute',
+          left: '0',
+          top: '0',
+          right: '0',
+          bottom: '0',
+          overflow: 'hidden',
+          opacity: '1',
+          lineHeight: '1.0',
+          userSelect: 'text',
+          WebkitUserSelect: 'text',
+          MozUserSelect: 'text',
+          msUserSelect: 'text'
+        })
+        
+        const canvasContainer = canvasRef.current.parentElement
+        if (canvasContainer) {
+          canvasContainer.style.position = 'relative'
+          canvasContainer.appendChild(textLayerDiv)
+        }
+      }
+
+      textLayerDiv.innerHTML = ''
+      textLayerDiv.style.width = viewport.width + 'px'
+      textLayerDiv.style.height = viewport.height + 'px'
+
+      pdfjsLib.renderTextLayer({
+        textContent,
+        container: textLayerDiv,
+        viewport,
+        textDivs: []
+      })
+
+      document.addEventListener('selectionchange', handleTextSelection)
+    } catch (err) {
+      console.error('Text layer error:', err)
+    }
+  }
+
+  const handleTextSelection = () => {
+    const selectedText = window.getSelection()?.toString() || ''
+    if (selectedText.trim()) {
+      console.log('✅ Selected text:', selectedText)
+      console.log('Page:', pageNum)
+      onTextSelect(selectedText, { page: pageNum })
+    }
+  }
+
+  const goToPage = (newPage: number) => {
+    if (pdfDoc && newPage >= 1 && newPage <= totalPages) {
       setPageNum(newPage)
     }
   }
@@ -131,7 +192,6 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
       return () => clearTimeout(timeoutId)
     }
   }, [pageNum])
-
   return (
     <div style={{ padding: '1rem', height: '100%' }}>
       <h2 style={{ marginBottom: '1rem', color: '#226f60' }}>📄 PDF Viewer</h2>
@@ -186,7 +246,7 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
             <button onClick={zoomIn}>🔍+</button>
           </div>
 
-          <div style={{ overflow: 'auto', border: '1px solid #ccc', borderRadius: '8px', maxHeight: '600px' }}>
+          <div style={{ overflow: 'auto', border: '1px solid #ccc', borderRadius: '8px', maxHeight: '600px', position: 'relative' }}>
             <canvas ref={canvasRef} style={{ display: 'block', margin: '0 auto' }} />
           </div>
         </div>
