@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { debounce } from './lib/utils'
 import { useState } from 'react'
 import { extractWithDatalab, type DatalabResult } from './lib/datalab'
 import PDFViewer from './components/PDFViewer'
@@ -11,15 +12,13 @@ function App() {
   const [aiError, setAiError] = useState<string>('')
   const [commits, setCommits] = useState<any[]>([])
 
-  const handleTextSelect = async (text: string, context: any) => {
+ const handleTextSelect = async (text: string, context: any) => {
   setSelectedText(text)
   setLoadingAI(true)
   setAiError('')
-    
-    try {
-    // Call the Rust command
-    const result = await invoke('extract_with_datalab', { text })
-     setAiInsight(result)
+  
+  try {
+    const result = await invoke('extract_with_qwen', { text })
     console.log('✅ AI Insight:', result)
   } catch (err) {
     setAiError('AI extraction failed: ' + (err as Error).message)
@@ -28,6 +27,10 @@ function App() {
     setLoadingAI(false)
   }
 }
+
+// Create debounced version (500ms delay)
+const debouncedHandleTextSelect = debounce(handleTextSelect, 500)
+
     return (
     <div className="container">
       <h1>🧠 Ishyango.AI</h1>
@@ -36,7 +39,7 @@ function App() {
       <div className="main-content">
         <div className="pdf-section">
           <h2>📄 PDF Viewer</h2>
-          <PDFViewer onTextSelect={handleTextSelect} />
+          <PDFViewer onTextSelect={debouncedHandleTextSelect} />
         </div>
 
         <div className="ai-section">
