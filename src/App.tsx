@@ -1,31 +1,33 @@
+import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
-import { extractInsights, type AIInsight } from './lib/qwen'
+import { extractWithDatalab, type DatalabResult } from './lib/datalab'
 import PDFViewer from './components/PDFViewer'
 import './App.css'
 
 function App() {
   const [selectedText, setSelectedText] = useState<string>('')
-  const [aiInsight, setAiInsight] = useState<AIInsight | null>(null)
+  const [aiInsight, setAiInsight] = useState<DatalabResult | null>(null)
   const [loadingAI, setLoadingAI] = useState<boolean>(false)
   const [aiError, setAiError] = useState<string>('')
   const [commits, setCommits] = useState<any[]>([])
 
   const handleTextSelect = async (text: string, context: any) => {
-    setSelectedText(text)
-    setLoadingAI(true)
-    setAiError('')
+  setSelectedText(text)
+  setLoadingAI(true)
+  setAiError('')
     
     try {
-      const insight = await extractInsights(text, `Page ${context.page}`)
-      setAiInsight(insight)
-      console.log('✅ AI Insight:', insight)
-    } catch (err) {
-      setAiError('AI extraction failed: ' + (err as Error).message)
-      console.error('AI Error:', err)
-    } finally {
-      setLoadingAI(false)
-    }
+    // Call the Rust command
+    const result = await invoke('extract_with_datalab', { text })
+     setAiInsight(result)
+    console.log('✅ AI Insight:', result)
+  } catch (err) {
+    setAiError('AI extraction failed: ' + (err as Error).message)
+    console.error('AI Error:', err)
+  } finally {
+    setLoadingAI(false)
   }
+}
     return (
     <div className="container">
       <h1>🧠 Ishyango.AI</h1>
