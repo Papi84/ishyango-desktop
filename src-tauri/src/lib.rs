@@ -6,68 +6,39 @@ pub struct AIInsight {
     pub concepts: Vec<String>,
     pub tags: Vec<String>,
 }
-
 #[tauri::command]
-async fn extract_with_qwen(text: String) -> Result<AIInsight, String> {
-    let api_key = "sk-594ff735da874f52a55a6ec4937f7793";
+async fn extract_with_ocr(image_path: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
     
-    let prompt = format!(r#"Analyze this text and extract:
-1. A brief summary (2-3 sentences)
-2. Key concepts (3-5 bullet points)
-3. Relevant tags (5-10 keywords)
-
-Text: "{}"
-
-Respond in JSON format:
-{{
-  "summary": "...",
-  "concepts": ["...", "..."],
-  "tags": ["...", "..."]
-}}"#, text);
-    
-   let client = reqwest::Client::new();
-
-let response = client
-    .post("https://api.qwen.ai/v1/chat/completions")
-    .header("Content-Type", "application/json")
-    .header("Authorization", &format!("Bearer {}", api_key))
-    .json(&serde_json::json!({
-        "model": "qwen-turbo",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an educational AI assistant. Respond ONLY with valid JSON."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "temperature": 0.3,
-        "max_tokens": 500
-    }))
-    .send()
-    .await
-    .map_err(|e| format!("Request failed: {}", e))?;
-
+    let response = client
+        .post("http://localhost:5000/extract")
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "image_path": image_path
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
     
     if !response.status().is_success() {
-        return Err(format!("API error: {}", response.status()));
+        return Err(format!("OCR server error: {}", response.status()));
     }
     
-    let data = response
+    let result = response
         .json::<serde_json::Value>()
         .await
         .map_err(|e| format!("Parse error: {}", e))?;
     
-    let content = data["choices"][0]["message"]["content"]
-        .as_str()
-        .unwrap_or("{}");
+    if let Some(error) = result.get("error") {
+        return Err(error.as_str().unwrap_or("Unknown error").to_string());
+    }
     
-    let insight: AIInsight = serde_json::from_str(content)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
+    let text = result
+        .get("text")
+        .and_then(|t| t.as_str())
+        .unwrap_or("No text extracted");
     
-    Ok(insight)
+    Ok(text.to_string())
 }
 
 #[tauri::command]
@@ -80,7 +51,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![greet, extract_with_qwen])
+        .invoke_handler(tauri::generate_handler![greet, extract_with_ocr])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
