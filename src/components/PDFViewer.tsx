@@ -131,7 +131,7 @@ export default function PDFViewer({ onTextSelect }: PDFViewerProps) {
       textLayerDiv.style.width = viewport.width + 'px'
       textLayerDiv.style.height = viewport.height + 'px'
 
-      pdfjsLib.renderTextLayer({
+      ;(pdfjsLib as any).renderTextLayer({
         textContent,
         container: textLayerDiv,
         viewport,

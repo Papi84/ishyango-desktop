@@ -1,4 +1,7 @@
 use serde::{Deserialize, Serialize};
+use chrono::Utc;
+mod db;
+use db::{Database, Commit};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AIInsight {
@@ -7,40 +10,66 @@ pub struct AIInsight {
     pub tags: Vec<String>,
 }
 #[tauri::command]
-async fn extract_with_ocr(image_path: String) -> Result<String, String> {
+async fn extract_ai_insights(text: String) -> Result<AIInsight, String> {
+    let api_key = "sk-594ff735da874f52a55a6ec4937f7793";
+    
+    let prompt = format!(r#"Analyze this text and extract:
+1. A brief summary (2-3 sentences)
+2. Key concepts (3-5 bullet points)
+3. Relevant tags (5-10 keywords)
+
+Text: "{}"
+
+Respond in JSON format:
+{{
+  "summary": "...",
+  "concepts": ["...", "..."],
+  "tags": ["...", "..."]
+}}"#, text);
+    
     let client = reqwest::Client::new();
     
     let response = client
-        .post("http://localhost:5000/extract")
+        .post("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
         .header("Content-Type", "application/json")
+        .header("Authorization", &format!("Bearer {}", api_key))
         .json(&serde_json::json!({
-            "image_path": image_path
+            "model": "qwen-turbo",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an educational AI assistant. Respond ONLY with valid JSON."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 500
         }))
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
     
     if !response.status().is_success() {
-        return Err(format!("OCR server error: {}", response.status()));
+        return Err(format!("API error: {}", response.status()));
     }
     
-    let result = response
-        .json::<serde_json::Value>()
+    let data = response
+                .json::<serde_json::Value>()
         .await
         .map_err(|e| format!("Parse error: {}", e))?;
     
-    if let Some(error) = result.get("error") {
-        return Err(error.as_str().unwrap_or("Unknown error").to_string());
-    }
+    let content = data["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("{}");
     
-    let text = result
-        .get("text")
-        .and_then(|t| t.as_str())
-        .unwrap_or("No text extracted");
+    let insight: AIInsight = serde_json::from_str(content)
+        .map_err(|e| format!("JSON parse error: {}", e))?;
     
-    Ok(text.to_string())
+    Ok(insight)
 }
-
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -51,7 +80,41 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![greet, extract_with_ocr])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            save_commit,
+            get_commits,
+            delete_commit,
+            extract_ai_insights
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+#[tauri::command]
+fn save_commit(text: String, page: i32, book_title: String, tags: String, notes: Option<String>) -> Result<i64, String> {
+    let db = Database::new().map_err(|el| el.to_string())?;
+    let commit = Commit {
+        id: None,
+        text,
+        page,
+        book_title,
+        tags,
+        notes,
+        created_at: Utc::now().to_rfc3339(),
+    };
+    
+    db.save_commit(&commit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_commits() -> Result<Vec<Commit>, String> {
+    let db = Database::new().map_err(|e| e.to_string())?;
+    db.get_commits().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_commit(id: i64) -> Result<(), String> {
+    let db = Database::new().map_err(|e| e.to_string())?;
+    db.delete_commit(id).map_err(|e| e.to_string())?;
+    Ok(())
 }

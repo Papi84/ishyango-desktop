@@ -1,10 +1,19 @@
 import { invoke } from '@tauri-apps/api/core'
-import { debounce } from './lib/utils'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PDFViewer from './components/PDFViewer'
+import { debounce } from './lib/utils'
 import './App.css'
 
-// Simple type for AI insights
+interface Commit {
+  id: number
+  text: string
+  page: number
+  book_title: string
+  tags: string
+  notes: string | null
+  created_at: string
+}
+
 interface AIInsight {
   summary: string
   concepts: string[]
@@ -16,38 +25,56 @@ function App() {
   const [aiInsight, setAiInsight] = useState<AIInsight | null>(null)
   const [loadingAI, setLoadingAI] = useState<boolean>(false)
   const [aiError, setAiError] = useState<string>('')
-  const [commits, setCommits] = useState<any[]>([])
+  const [commits, setCommits] = useState<Commit[]>([])
 
-  const handleTextSelect = async (text: string, context: any) => {
+  const handleTextSelect = async (text: string, context: { page?: number }) => {
     setSelectedText(text)
     setLoadingAI(true)
     setAiError('')
+    setAiInsight(null)
+
+    const pageNumber = context.page ?? 1
 
     try {
-      // For MVP: Just use the selected text directly
-      // OCR is for scanned PDFs where text selection doesn't work
-      // We'll add AI insights later (local or API)
-      
-      // For now, create a simple "insight" from the text
-      const insight: AIInsight = {
-        summary: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
-        concepts: ['Text extracted from PDF'],
-        tags: ['PDF', 'Learning', 'Page ' + context.page]
-      }
-      
+      await invoke('save_commit', {
+        text,
+        page: pageNumber,
+        bookTitle: 'Current Book',
+        tags: `Page ${pageNumber}`,
+        notes: null
+      })
+
+      const insight = await invoke<AIInsight>('extract_ai_insights', { text })
       setAiInsight(insight)
-      console.log('✅ Text extracted:', text)
+
+      const loadedCommits = await invoke<Commit[]>('get_commits')
+      setCommits(loadedCommits)
+
+      console.log('✅ AI Insights:', insight)
     } catch (err) {
-      setAiError('Extraction failed: ' + (err as Error).message)
+      setAiError('AI failed: ' + (err as Error).message)
       console.error('Error:', err)
     } finally {
       setLoadingAI(false)
     }
   }
 
-  // Create debounced version (500ms delay)
+  useEffect(() => {
+    const loadCommits = async () => {
+      try {
+        const loadedCommits = await invoke<Commit[]>('get_commits')
+        setCommits(loadedCommits)
+      } catch (err) {
+        console.error('Failed to load commits:', err)
+      }
+    }
+
+    loadCommits()
+  }, [])
+
   const debouncedHandleTextSelect = debounce(handleTextSelect, 500)
-    return (
+
+  return (
     <div className="container">
       <h1>🧠 Ishyango.AI</h1>
       <p className="subtitle">Git-like Learning Companion for PDFs</p>
@@ -83,7 +110,24 @@ function App() {
         <div className="commits-section">
           <h2>📚 Learning Commits</h2>
           <div className="commits-list">
-            <p>Your learning commits will appear here...</p>
+            {commits.length === 0 ? (
+              <p>No commits yet. Select text to create your first commit!</p>
+            ) : (
+              <ul>
+                {commits.map((commit) => (
+                  <li key={commit.id} className="commit-item">
+                    <div className="commit-header">
+                      <span className="commit-page">Page {commit.page}</span>
+                      <span className="commit-date">
+                        {new Date(commit.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="commit-text">{commit.text}</p>
+                    <div className="commit-tags">{commit.tags}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
