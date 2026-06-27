@@ -11,7 +11,7 @@ pub struct AIInsight {
 }
 #[tauri::command]
 async fn extract_ai_insights(text: String) -> Result<AIInsight, String> {
-    let api_key = "sk-594ff735da874f52a55a6ec4937f7793";
+    let api_key = "sk-ws-H.RRYERP.tQ1U.MEUCIQDesrbF3YVXVpNLZwlZNya14sM54jYs67ebk_mX7tPn1QIgYcNDkzCAtiw3xPsGxkQ0jjUQUYjJrr-6VkIHqHD_74I";
     
     let prompt = format!(r#"Analyze this text and extract:
 1. A brief summary (2-3 sentences)
@@ -30,7 +30,7 @@ Respond in JSON format:
     let client = reqwest::Client::new();
     
     let response = client
-        .post("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
+        .post("https://ws-1v51cgudquqphqdp.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions")
         .header("Content-Type", "application/json")
         .header("Authorization", &format!("Bearer {}", api_key))
         .json(&serde_json::json!({
@@ -57,7 +57,7 @@ Respond in JSON format:
     }
     
     let data = response
-                .json::<serde_json::Value>()
+        .json::<serde_json::Value>()
         .await
         .map_err(|e| format!("Parse error: {}", e))?;
     
@@ -70,6 +70,7 @@ Respond in JSON format:
     
     Ok(insight)
 }
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
