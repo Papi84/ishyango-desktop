@@ -11,7 +11,7 @@ pub struct AIInsight {
 }
 #[tauri::command]
 async fn extract_ai_insights(text: String) -> Result<AIInsight, String> {
-    let api_key = "sk-ws-H.RRYERP.tQ1U.MEUCIQDesrbF3YVXVpNLZwlZNya14sM54jYs67ebk_mX7tPn1QIgYcNDkzCAtiw3xPsGxkQ0jjUQUYjJrr-6VkIHqHD_74I";
+    let api_key = "sk-ws-H.PILPXH.ABcu.MEQCIGSKXbURZBgkoICwHfKseDwfrJRErJLidPftcc-f74QCAiBuCewPYNRhJPHKOc6NMiy08IvNjNs19pVEFM1Af1WyuA";
     
     let prompt = format!(r#"Analyze this text and extract:
 1. A brief summary (2-3 sentences)
