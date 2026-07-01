@@ -1,3 +1,4 @@
+import CommitGalaxy3D from './components/CommitGalaxy3D'
 import { invoke } from '@tauri-apps/api/core'
 import { useState, useEffect } from 'react'
 import PDFViewer from './components/PDFViewer'

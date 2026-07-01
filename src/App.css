@@ -211,3 +211,12 @@ h2 {
   font-size: 0.75rem;
   color: #888;
 }
+.commits-3d-section {
+  margin-top: 2rem;
+  padding: 1rem;
+}
+
+.commits-3d-section h2 {
+  color: #226f60;
+  margin-bottom: 1rem;
+}
