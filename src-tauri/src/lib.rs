@@ -11,7 +11,10 @@ pub struct AIInsight {
 }
 #[tauri::command]
 async fn extract_ai_insights(text: String) -> Result<AIInsight, String> {
-    let api_key = "sk-ws-H.PILPXH.ABcu.MEQCIGSKXbURZBgkoICwHfKseDwfrJRErJLidPftcc-f74QCAiBuCewPYNRhJPHKOc6NMiy08IvNjNs19pVEFM1Af1WyuA";
+   let api_key = std::env::var("QWEN_API_KEY")
+    .unwrap_or_else(|_| String::new());let api_key = std::env::var("QWEN_API_KEY").unwrap_or_else(|_| String::new());
+
+
     
     let prompt = format!(r#"Analyze this text and extract:
 1. A brief summary (2-3 sentences)
