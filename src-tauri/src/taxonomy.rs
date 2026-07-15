@@ -84,6 +84,7 @@ impl Taxonomy {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn get_prerequisites(&self, topic_id: &str) -> Vec<&Dependency> {
         self.dependencies
             .iter()
