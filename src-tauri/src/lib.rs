@@ -1,35 +1,12 @@
+// Taxonomy module for knowledge graph
 mod taxonomy;
 use taxonomy::Taxonomy;
+
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 lazy_static! {
     static ref TAXONOMY: Mutex<Option<Taxonomy>> = Mutex::new(None);
-}
-
-fn load_taxonomy() {
-    use std::path::Path;
-
-    // Prefer the crate manifest dir (reliable during development and when packaged).
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().to_string_lossy().to_string());
-
-    let taxonomy_path = Path::new(&manifest_dir).join("data/os-taxonomy/data");
-
-    if taxonomy_path.exists() {
-        match taxonomy::Taxonomy::load(taxonomy_path.to_str().unwrap_or_default()) {
-            Ok(taxonomy) => {
-                *TAXONOMY.lock().unwrap() = Some(taxonomy);
-                println!(
-                    "✅ OS Taxonomy loaded: {} topics",
-                    TAXONOMY.lock().unwrap().as_ref().unwrap().topics.len()
-                );
-            }
-            Err(e) => eprintln!("⚠️ Failed to load taxonomy: {}", e),
-        }
-    } else {
-        println!("OS Taxonomy path not found: {}", taxonomy_path.display());
-    }
 }
 
 use serde::{Deserialize, Serialize};
@@ -43,13 +20,11 @@ pub struct AIInsight {
     pub concepts: Vec<String>,
     pub tags: Vec<String>,
 }
+
 #[tauri::command]
 async fn extract_ai_insights(text: String) -> Result<AIInsight, String> {
-   let api_key = std::env::var("QWEN_API_KEY")
-    .unwrap_or_else(|_| String::new());let api_key = std::env::var("QWEN_API_KEY").unwrap_or_else(|_| String::new());
+    let api_key = std::env::var("QWEN_API_KEY").unwrap_or_else(|_| String::new());
 
-
-    
     let prompt = format!(r#"Analyze this text and extract:
 1. A brief summary (2-3 sentences)
 2. Key concepts (3-5 bullet points)
@@ -59,13 +34,13 @@ Text: "{}"
 
 Respond in JSON format:
 {{
-  "summary": "...",
-  "concepts": ["...", "..."],
-  "tags": ["...", "..."]
+ "summary": "...",
+ "concepts": ["...", "..."],
+ "tags": ["...", "..."]
 }}"#, text);
-    
+
     let client = reqwest::Client::new();
-    
+
     let response = client
         .post("https://ws-1v51cgudquqphqdp.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions")
         .header("Content-Type", "application/json")
@@ -88,23 +63,23 @@ Respond in JSON format:
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
-    
+
     if !response.status().is_success() {
         return Err(format!("API error: {}", response.status()));
     }
-    
+
     let data = response
         .json::<serde_json::Value>()
         .await
         .map_err(|e| format!("Parse error: {}", e))?;
-    
+
     let content = data["choices"][0]["message"]["content"]
         .as_str()
         .unwrap_or("{}");
-    
+
     let insight: AIInsight = serde_json::from_str(content)
         .map_err(|e| format!("JSON parse error: {}", e))?;
-    
+
     Ok(insight)
 }
 
@@ -113,29 +88,9 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    // Load taxonomy at runtime (from the crate directory). This ensures the
-    // TAXONOMY static is initialized in the application's process rather than
-    // in the build script.
-    load_taxonomy();
-
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_http::init())
-        .invoke_handler(tauri::generate_handler![
-            greet,
-            save_commit,
-            get_commits,
-            delete_commit,
-            extract_ai_insights
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
 #[tauri::command]
 fn save_commit(text: String, page: i32, book_title: String, tags: String, notes: Option<String>) -> Result<i64, String> {
-    let db = Database::new().map_err(|el| el.to_string())?;
+    let db = Database::new().map_err(|e| e.to_string())?;
     let commit = Commit {
         id: None,
         text,
@@ -145,7 +100,7 @@ fn save_commit(text: String, page: i32, book_title: String, tags: String, notes:
         notes,
         created_at: Utc::now().to_rfc3339(),
     };
-    
+
     db.save_commit(&commit).map_err(|e| e.to_string())
 }
 
@@ -160,4 +115,34 @@ fn delete_commit(id: i64) -> Result<(), String> {
     let db = Database::new().map_err(|e| e.to_string())?;
     db.delete_commit(id).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // Load taxonomy data
+    let taxonomy_path = std::env::current_dir()
+        .unwrap_or_default()
+        .join("data/os-taxonomy/data");
+
+    if taxonomy_path.exists() {
+        match Taxonomy::load(&taxonomy_path) {
+            Ok(taxonomy) => {
+                *TAXONOMY.lock().unwrap() = Some(taxonomy);
+                println!("✅ OS Taxonomy loaded: {} topics", TAXONOMY.lock().unwrap().as_ref().unwrap().topics.len());
+            }            Err(e) => println!("⚠️ Failed to load taxonomy: {}", e),
+        }
+    }
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_http::init())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            save_commit,
+            get_commits,
+            delete_commit,
+            extract_ai_insights
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
