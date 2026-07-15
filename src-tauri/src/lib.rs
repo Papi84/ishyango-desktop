@@ -22,8 +22,9 @@ pub struct AIInsight {
 }
 
 #[tauri::command]
-async fn extract_ai_insights(text: String) -> Result<AIInsight, String> {
-    let api_key = std::env::var("QWEN_API_KEY").unwrap_or_else(|_| String::new());
+async fn extract_ai_insights(text: String, api_key: String) -> Result<AIInsight, String> {
+    if api_key.is_empty() {
+        return Err("Please provide your Qwen API key in Settings".to_string());}
 
     let prompt = format!(r#"Analyze this text and extract:
 1. A brief summary (2-3 sentences)
@@ -116,6 +117,16 @@ fn delete_commit(id: i64) -> Result<(), String> {
     db.delete_commit(id).map_err(|e| e.to_string())?;
     Ok(())
 }
+#[tauri::command]
+fn test_taxonomy(query: String) -> Result<Vec<String>, String> {
+    let taxonomy_guard = TAXONOMY.lock().map_err(|e| e.to_string())?;
+    let taxonomy = taxonomy_guard.as_ref().ok_or("Taxonomy not loaded")?;
+    
+    let topics = taxonomy.find_topics_by_name(&query);
+    
+    Ok(topics.iter().map(|t| t.name.clone()).collect())
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -125,13 +136,14 @@ pub fn run() {
         .join("data/os-taxonomy/data");
 
     if taxonomy_path.exists() {
-        match Taxonomy::load(&taxonomy_path) {
-            Ok(taxonomy) => {
-                *TAXONOMY.lock().unwrap() = Some(taxonomy);
-                println!("✅ OS Taxonomy loaded: {} topics", TAXONOMY.lock().unwrap().as_ref().unwrap().topics.len());
-            }            Err(e) => println!("⚠️ Failed to load taxonomy: {}", e),
+    match Taxonomy::load(&taxonomy_path.to_string_lossy()) {
+        Ok(taxonomy) => {
+            *TAXONOMY.lock().unwrap() = Some(taxonomy);
+            println!("✅ OS Taxonomy loaded: {} topics", TAXONOMY.lock().unwrap().as_ref().unwrap().topics.len());
         }
+        Err(e) => println!("⚠️ Failed to load taxonomy: {}", e),
     }
+}
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -141,7 +153,8 @@ pub fn run() {
             save_commit,
             get_commits,
             delete_commit,
-            extract_ai_insights
+            extract_ai_insights,
+            test_taxonomy
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
