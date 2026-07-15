@@ -88,11 +88,27 @@ function App() {
   return (
     <div className="container">
       <button
-  onClick={() => setShowSettings(true)}
-    className="fixed top-4 right-4 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
->
-  ️ Settings
-</button>
+        onClick={() => setShowSettings(true)}
+        className="fixed top-4 right-4 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
+      >
+        ️ Settings
+      </button>
+
+      <button
+        onClick={async () => {
+          try {
+            const topics = await invoke('test_taxonomy', { query: 'photosynthesis' })
+            console.log('✅ Topics:', topics)
+            alert('Found topics: ' + topics.join(', '))
+          } catch (err) {
+            console.error('❌ Error:', err)
+            alert('Error: ' + err)
+          }
+        }}
+        className="fixed top-4 right-32 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg"
+      >
+        Test Taxonomy
+      </button>
 
 
       <h1>🧠 Ishyango.AI</h1>
