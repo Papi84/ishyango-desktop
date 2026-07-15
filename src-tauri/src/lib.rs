@@ -131,19 +131,25 @@ fn test_taxonomy(query: String) -> Result<Vec<String>, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load taxonomy data
-    let taxonomy_path = std::env::current_dir()
-        .unwrap_or_default()
+    let taxonomy_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
         .join("data/os-taxonomy/data");
 
+    println!("🔍 Looking for taxonomy at: {}", taxonomy_path.display());
+
     if taxonomy_path.exists() {
-    match Taxonomy::load(&taxonomy_path.to_string_lossy()) {
-        Ok(taxonomy) => {
-            *TAXONOMY.lock().unwrap() = Some(taxonomy);
-            println!("✅ OS Taxonomy loaded: {} topics", TAXONOMY.lock().unwrap().as_ref().unwrap().topics.len());
+        match Taxonomy::load(&taxonomy_path.to_string_lossy()) {
+            Ok(taxonomy) => {
+                let count = taxonomy.topics.len();
+                *TAXONOMY.lock().unwrap() = Some(taxonomy);
+                println!("✅ OS Taxonomy loaded: {} topics", count);
+            }
+            Err(e) => println!("⚠️ Failed to load taxonomy: {}", e),
         }
-        Err(e) => println!("⚠️ Failed to load taxonomy: {}", e),
+    } else {
+        println!("❌ Taxonomy path does not exist: {}", taxonomy_path.display());
     }
-}
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
