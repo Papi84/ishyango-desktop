@@ -97,17 +97,15 @@ function App() {
       <button
         onClick={async () => {
           try {
-            const topics = await invoke('test_taxonomy', { query: 'photosynthesis' })
-            console.log('✅ Topics:', topics)
-            alert('Found topics: ' + topics.join(', '))
+            const topics = await invoke('test_taxonomy', { query: 'arithmetic' })
+            alert('✅ Found topics: ' + topics.join(', '))
           } catch (err) {
-            console.error('❌ Error:', err)
-            alert('Error: ' + err)
+            alert('❌ Error: ' + err)
           }
         }}
         className="fixed top-4 right-32 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg"
       >
-        Test Taxonomy
+        🧠 Test Knowledge Graph
       </button>
 
 
