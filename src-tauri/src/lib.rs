@@ -1,3 +1,37 @@
+mod taxonomy;
+use taxonomy::Taxonomy;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+
+lazy_static! {
+    static ref TAXONOMY: Mutex<Option<Taxonomy>> = Mutex::new(None);
+}
+
+fn load_taxonomy() {
+    use std::path::Path;
+
+    // Prefer the crate manifest dir (reliable during development and when packaged).
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().to_string_lossy().to_string());
+
+    let taxonomy_path = Path::new(&manifest_dir).join("data/os-taxonomy/data");
+
+    if taxonomy_path.exists() {
+        match taxonomy::Taxonomy::load(taxonomy_path.to_str().unwrap_or_default()) {
+            Ok(taxonomy) => {
+                *TAXONOMY.lock().unwrap() = Some(taxonomy);
+                println!(
+                    "✅ OS Taxonomy loaded: {} topics",
+                    TAXONOMY.lock().unwrap().as_ref().unwrap().topics.len()
+                );
+            }
+            Err(e) => eprintln!("⚠️ Failed to load taxonomy: {}", e),
+        }
+    } else {
+        println!("OS Taxonomy path not found: {}", taxonomy_path.display());
+    }
+}
+
 use serde::{Deserialize, Serialize};
 use chrono::Utc;
 mod db;
@@ -81,6 +115,11 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load taxonomy at runtime (from the crate directory). This ensures the
+    // TAXONOMY static is initialized in the application's process rather than
+    // in the build script.
+    load_taxonomy();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
