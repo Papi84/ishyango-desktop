@@ -30,7 +30,7 @@ function App() {
   const [aiError, setAiError] = useState<string>('')
   const [commits, setCommits] = useState<Commit[]>([])
 
-  const handleTextSelect = async (text: string, context: any) => {
+  const handleTextSelect = async (text: string, _context: any) => {
   setSelectedText(text)
   setLoadingAI(true)
   setAiError('')
@@ -44,7 +44,7 @@ function App() {
   }
 
   try {
-    const insight = await invoke('extract_ai_insights', { 
+    const insight = await invoke<AIInsight>('extract_ai_insights', { 
       text,
       apiKey  // Pass the user's API key
     })
@@ -71,9 +71,9 @@ function App() {
 
     loadCommits()
   }, [])
-  const mapCommitToTopic = async (text: string) => {
+  const _mapCommitToTopic = async (text: string) => {
   try {
-    const topics = await invoke('test_taxonomy', { query: text.substring(0, 50) })
+    const topics = await invoke<string[]>('test_taxonomy', { query: text.substring(0, 50) })
     console.log(' Mapped topics:', topics)
     return topics
   } catch (err) {
@@ -97,7 +97,7 @@ function App() {
       <button
         onClick={async () => {
           try {
-            const topics = await invoke('test_taxonomy', { query: 'arithmetic' })
+            const topics = await invoke<string[]>('test_taxonomy', { query: 'arithmetic' })
             alert('✅ Found topics: ' + topics.join(', '))
           } catch (err) {
             alert('❌ Error: ' + err)

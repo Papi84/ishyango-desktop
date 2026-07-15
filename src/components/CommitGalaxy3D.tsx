@@ -24,7 +24,7 @@ function CommitSphere({ commit, position, color }: {
       const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     if (meshRef.current) {
       meshRef.current.rotation.x += delta * 0.2
       meshRef.current.rotation.y += delta * 0.2
