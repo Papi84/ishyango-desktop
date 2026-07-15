@@ -82,6 +82,9 @@ function App() {
   }
 }
 
+// Reference the helper so TypeScript doesn't error about unused local (will be wired up later)
+void _mapCommitToTopic;
+
 
   const debouncedHandleTextSelect = debounce(handleTextSelect, 500)
 
