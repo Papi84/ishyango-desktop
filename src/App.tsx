@@ -1,4 +1,4 @@
-import CommitGalaxy3D from './components/CommitGalaxy3D'
+import Settings from './components/Settings'
 import { invoke } from '@tauri-apps/api/core'
 import { useState, useEffect } from 'react'
 import PDFViewer from './components/PDFViewer'
@@ -24,41 +24,40 @@ interface AIInsight {
 function App() {
   const [selectedText, setSelectedText] = useState<string>('')
   const [aiInsight, setAiInsight] = useState<AIInsight | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
   const [loadingAI, setLoadingAI] = useState<boolean>(false)
+
   const [aiError, setAiError] = useState<string>('')
   const [commits, setCommits] = useState<Commit[]>([])
 
-  const handleTextSelect = async (text: string, context: { page?: number }) => {
-    setSelectedText(text)
-    setLoadingAI(true)
-    setAiError('')
-    setAiInsight(null)
+  const handleTextSelect = async (text: string, context: any) => {
+  setSelectedText(text)
+  setLoadingAI(true)
+  setAiError('')
 
-    const pageNumber = context.page ?? 1
+   const apiKey = localStorage.getItem('qwen_api_key') || ''
 
-    try {
-      await invoke('save_commit', {
-        text,
-        page: pageNumber,
-        bookTitle: 'Current Book',
-        tags: `Page ${pageNumber}`,
-        notes: null
-      })
-
-      const insight = await invoke<AIInsight>('extract_ai_insights', { text })
-      setAiInsight(insight)
-
-      const loadedCommits = await invoke<Commit[]>('get_commits')
-      setCommits(loadedCommits)
-
-      console.log('✅ AI Insights:', insight)
-    } catch (err) {
-      setAiError('AI failed: ' + (err as Error).message)
-      console.error('Error:', err)
-    } finally {
-      setLoadingAI(false)
-    }
+  if (!apiKey) {
+    setAiError('Please add your Qwen API key in Settings (️ icon)')
+    setLoadingAI(false)
+    return
   }
+
+  try {
+    const insight = await invoke('extract_ai_insights', { 
+      text,
+      apiKey  // Pass the user's API key
+    })
+    setAiInsight(insight)
+    console.log('✅ AI Insight:', insight)
+  } catch (err) {
+    setAiError('AI failed: ' + (err as Error).message)
+    console.error('AI Error:', err)
+  } finally {
+    setLoadingAI(false)
+  }
+}
+
 
   useEffect(() => {
     const loadCommits = async () => {
@@ -72,11 +71,30 @@ function App() {
 
     loadCommits()
   }, [])
+  const mapCommitToTopic = async (text: string) => {
+  try {
+    const topics = await invoke('test_taxonomy', { query: text.substring(0, 50) })
+    console.log(' Mapped topics:', topics)
+    return topics
+  } catch (err) {
+    console.error('Failed to map topic:', err)
+    return []
+  }
+}
+
 
   const debouncedHandleTextSelect = debounce(handleTextSelect, 500)
 
   return (
     <div className="container">
+      <button
+  onClick={() => setShowSettings(true)}
+    className="fixed top-4 right-4 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
+>
+  ️ Settings
+</button>
+
+
       <h1>🧠 Ishyango.AI</h1>
       <p className="subtitle">Git-like Learning Companion for PDFs</p>
 
@@ -129,6 +147,10 @@ function App() {
                 ))}
               </ul>
             )}
+            {showSettings && (
+  <Settings onClose={() => setShowSettings(false)} />
+)}
+
           </div>
         </div>
       </div>
